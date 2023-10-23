@@ -9,24 +9,20 @@
 #include <fcntl.h>
 #include<pthread.h>
 #include<sys/types.h>
-#include<queue>
+#include<sstream>
 using namespace std;
-
 const int MAX_BUFFER_SIZE = 10000;
-pthread_mutex_t lck,lc;
-pthread_cond_t cond;
-int counter =0;
-queue<int> requestQueue;
-struct ThreadData {
-    int clientSocket;
-    char buffer[MAX_BUFFER_SIZE];
-};
-
-
+char buffer[MAX_BUFFER_SIZE];
+pthread_mutex_t lck = PTHREAD_MUTEX_INITIALIZER;
+int counter=0;
 bool isOutputCorrect(const string& programOutput) {
     string expectedOutput = "1 2 3 4 5 6 7 8 9 10";
     return programOutput == expectedOutput;
 }
+struct ThreadData {
+    int clientSocket;
+    char buffer[MAX_BUFFER_SIZE];
+};
 void *handlereq(void *data){
   while(1){
    
@@ -57,6 +53,7 @@ void *handlereq(void *data){
     ofstream codeFile(tempFileName);
     codeFile << buffer;
     codeFile.close();
+     pthread_mutex_unlock(&lck);
     // Compile the code
     int compileResult = system(("g++ -o student_program_" + to_string(g) + " " + tempFileName + " 2> " + compileErrorFileName).c_str());
    
@@ -119,10 +116,10 @@ void *handlereq(void *data){
         bool outputCorrect = isOutputCorrect(programOutput);
         // Send the result back to the client
         if (outputCorrect) {
-            pthread_mutex_lock(&lck);
             string response = "PASS";
-            send(clientSocket, response.c_str(), response.size(), 0); 	
-            pthread_mutex_unlock(&lck);
+            pthread_mutex_lock(&lck);
+            send(clientSocket, response.c_str(), response.size(), 0);
+            pthread_mutex_unlock(&lck);	
             if ((remove(("runtime_error_" + to_string(g) + ".txt").c_str())) != 0) {
                cerr << "Error deleting temporary runtime error file." << endl;
 	    }
@@ -146,7 +143,6 @@ void *handlereq(void *data){
             err.close();
             string response = "OUTPUT ERROR\n" + OutErr;
             send(clientSocket, response.c_str(), response.size(), 0);
-            
             pthread_mutex_unlock(&lck);
             if ((remove(("runtime_error_"+to_string(g)+ ".txt").c_str())) != 0) {
             cerr << "Error deleting temporary runtime error file." << endl;
@@ -174,28 +170,6 @@ void *handlereq(void *data){
     //pthread_mutex_unlock(&lck);
    
 }}  
-void* workerThread(void* arg) {
-    while (true) {
-        pthread_mutex_lock(&lc);
-        while (requestQueue.empty()) {
-            // Wait for a grading request in the queue
-            pthread_cond_wait(&cond, &lc);
-        }
-        // Get the next grading request from the queue
-        int clientSocket = requestQueue.front();
-        requestQueue.pop();
-
-        pthread_mutex_unlock(&lc);
-
-        // Process the grading request
-        ThreadData* threadData = new ThreadData;
-        threadData->clientSocket = clientSocket;
-        memset(threadData->buffer, 0, sizeof(threadData->buffer));
-        pthread_t thr;
-        pthread_create(&thr, nullptr, handlereq, threadData);
-        //pthread_join(thr,nullptr);
-    }
-}      
 int main(int argc, char* argv[]) {
     if (argc != 2) {
         cerr << "Usage: " << argv[0] << " <port>" << endl;
@@ -223,7 +197,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Listen for incoming connections
-    if (listen(serverSocket, 300) == -1) {
+    if (listen(serverSocket, 100) == -1) {
         cerr << "Error listening for connections." << endl;
         return 1;
     }
@@ -238,38 +212,36 @@ int main(int argc, char* argv[]) {
         perror("close");
         return 1;
     }
-    pthread_mutex_init(&lck, nullptr);
-    pthread_cond_init(&cond, nullptr);
-    pthread_mutex_init(&lc, nullptr);
-     int thread_pool_size = 5;  // Adjust as needed
-
-    pthread_t workerThreads[thread_pool_size];
-    
-    // Create worker threads
-    for (int i = 0; i < thread_pool_size; i++) {
-        pthread_create(&workerThreads[i], nullptr, workerThread, nullptr);
-    }
-
-    while (true) {
+     while(true) {
+        // Accept incoming connection
+        
         clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &clientAddrLen);
         if (clientSocket == -1) {
             cerr << "Error accepting connection." << endl;
             continue;
+            }
+        ThreadData *threadData = new ThreadData;
+        threadData->clientSocket = clientSocket;
+        memset(threadData->buffer, 0, sizeof(threadData->buffer));
+        pthread_t thr;
+        pthread_create(&thr,NULL,handlereq,threadData); 
+        //pthread_join(thr,NULL);
+        pthread_detach(thr);
+        /*pthread_t thr;
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+	if (pthread_create(&thr, &attr, handlereq, &threadData) != 0) {
+                cerr << "Error creating thread." << endl;
+                break;
         }
-
-        pthread_mutex_lock(&lck);
-
-        // Enqueue the client socket for grading
-        requestQueue.push(clientSocket);
+	pthread_attr_destroy(&attr); 
+         */
         
-        // Signal a worker thread to process the request
-        pthread_cond_signal(&cond);
-
-        pthread_mutex_unlock(&lck);
       }
-
-        //for(int i=0;i<thread_pool_size;i++){
-         // pthread_join(thr[i],NULL);}
+    
+     
      //close(clientSocket);
      //close(serverSocket);
     return 0;
