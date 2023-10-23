@@ -8,7 +8,6 @@ Course Project of CS744 (Design &amp; Engineering of Computer Systems) under Pro
 4. test.cpp
 
 Steps :
-
-terminal 1 : $ g++ server7.cpp -o server
-terminal 1 : $ ./server <port_number>
-terminal 2 : $ bash loadtest7.sh <number_of_clients> <loop_number> <sleep_time> 
+1. terminal 1 : $ g++ server7.cpp -o server
+2. terminal 1 : $ ./server <port_number>
+3. terminal 2 : $ bash loadtest7.sh <number_of_clients> <loop_number> <sleep_time> 
