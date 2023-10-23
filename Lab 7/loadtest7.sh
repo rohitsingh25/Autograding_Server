@@ -4,7 +4,7 @@ a=$1
 loop=$2
 sleeptime=$3
 g++ server7.cpp -o server
-./server 1528 &
+#./server 1528 &
 sleep 2
 g++ client7.cpp -o submit
 # Create a file to store the Throughput and response time values
@@ -15,10 +15,11 @@ echo "Clients AverageResponseTime" > "$response_time_file"
 #for loop  for varying number of clients
 for ((j=1; j<=10; j++)); do
 for ((i=1; i<=$numclients; i++)); do
-    otpt=$(./submit 127.0.0.1:1528 test.cpp "$loop" "$sleeptime" &)
-    f_name="otpt_$j$i.txt"
-    echo "$otpt" > "$f_name"
+    (./submit 127.0.0.1:1528 test.cpp "$loop" "$sleeptime" > "otpt_$j$i.txt" ) &
+    #f_name="otpt_$j$i.txt"
+    #echo "$otpt" > "$f_name"
 done
+wait
 #changing number of clients for next iteration by a step size equal to 10
 numclients=$(($numclients + 10))
 done
