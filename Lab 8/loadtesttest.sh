@@ -4,12 +4,12 @@ a=$1
 b=$1
 loop=$2
 sleeptime=$3
-g++ tryserv.cpp -o server
+g++ server8.cpp -o server
 CPU_AFFINITY="0,1"
 #./server 1829 &
 #server_pid=$!
 sleep 2
-g++ try.cpp -o submit
+g++ client8.cpp -o submit
 # Create a file to store the Throughput and response time values
 throughput_file="throughput_data.txt"
 response_time_file="response_time_data.txt"
