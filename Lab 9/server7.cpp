@@ -68,8 +68,6 @@ int main(int argc, char* argv[]) {
             cerr << "Error accepting connection." << endl;
             continue;
             }
-       
-        while(true){
         char buffer[MAX_BUFFER_SIZE];
         memset(buffer, 0, sizeof(buffer));
         // Receive source code from client
@@ -158,14 +156,8 @@ int main(int argc, char* argv[]) {
          if (remove("student_output.txt") != 0) {
             cerr << "Error deleting temporary code file." << endl;
             }
-        }     
-        }
-        
-      
-    
-     
+        }      
      //close(clientSocket);
      //close(serverSocket);
     return 0;
 }
-

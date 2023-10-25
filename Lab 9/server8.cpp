@@ -24,7 +24,7 @@ struct ThreadData {
     char buffer[MAX_BUFFER_SIZE];
 };
 void *handlereq(void *data){
-  while(1){
+  
    
     pthread_mutex_lock(&lck);
     counter++;
@@ -53,7 +53,6 @@ void *handlereq(void *data){
     ofstream codeFile(tempFileName);
     codeFile << buffer;
     codeFile.close();
-     pthread_mutex_unlock(&lck);
     // Compile the code
     int compileResult = system(("g++ -o student_program_" + to_string(g) + " " + tempFileName + " 2> " + compileErrorFileName).c_str());
    
@@ -64,6 +63,7 @@ void *handlereq(void *data){
         string response = "COMPILER ERROR\n" + compileError;
         pthread_mutex_lock(&lck);
         send(clientSocket, response.c_str(), response.size(), 0);
+        close(clientSocket);
         pthread_mutex_unlock(&lck);
         errorFile.close();
         // Remove the temporary compile error file
@@ -73,7 +73,8 @@ void *handlereq(void *data){
         if (remove(tempFileName.c_str()) != 0) {
             cerr << "Error deleting temporary student_code file." << endl;
         }
-        continue;
+        return nullptr;
+        //continue;
     }
 
     // Execute the code
@@ -106,7 +107,9 @@ void *handlereq(void *data){
         string response = "RUNTIME ERROR\n" + runtimeError;
         
         send(clientSocket, response.c_str(), response.size(), 0);
+        close(clientSocket);
         pthread_mutex_unlock(&lck);
+        return nullptr;
         
     } else {
         // Capture the program's output
@@ -119,6 +122,7 @@ void *handlereq(void *data){
             string response = "PASS";
             pthread_mutex_lock(&lck);
             send(clientSocket, response.c_str(), response.size(), 0);
+            close(clientSocket);
             pthread_mutex_unlock(&lck);	
             if ((remove(("runtime_error_" + to_string(g) + ".txt").c_str())) != 0) {
                cerr << "Error deleting temporary runtime error file." << endl;
@@ -132,7 +136,7 @@ void *handlereq(void *data){
             if (remove(tempFileName.c_str()) != 0) {
             cerr << "Error deleting temporary student_code file." << endl;
            }
-            	
+            return nullptr;	
           }
         else {
             // There's an output error, compare it with the expected output
@@ -143,6 +147,7 @@ void *handlereq(void *data){
             err.close();
             string response = "OUTPUT ERROR\n" + OutErr;
             send(clientSocket, response.c_str(), response.size(), 0);
+            close(clientSocket);
             pthread_mutex_unlock(&lck);
             if ((remove(("runtime_error_"+to_string(g)+ ".txt").c_str())) != 0) {
             cerr << "Error deleting temporary runtime error file." << endl;
@@ -159,17 +164,17 @@ void *handlereq(void *data){
            if ((remove(("output_error_"+to_string(g) + ".txt").c_str())) != 0) {
             //cerr << "Error deleting temporary student_error file." << endl;
            }
-          
+          return nullptr;
         }
        
        
         
     }
-    
+    return nullptr;
     // Unlock the mutex and return
     //pthread_mutex_unlock(&lck);
    
-}}  
+}  
 int main(int argc, char* argv[]) {
     if (argc != 2) {
         cerr << "Usage: " << argv[0] << " <port>" << endl;
@@ -246,4 +251,3 @@ int main(int argc, char* argv[]) {
      //close(serverSocket);
     return 0;
 }
-

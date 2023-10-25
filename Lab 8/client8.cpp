@@ -27,6 +27,21 @@ int main(int argc, char* argv[]) {
     char* serverAddress = strtok(argv[1], ":");
     char* serverPort = strtok(NULL, ":");
     char* sourceCodeFile = argv[2];
+    int lp=atoi(argv[3]);
+    int sl=atoi(argv[4]);
+    struct timeval ntimeout;
+    int r=atoi(argv[5]);
+    ntimeout.tv_sec = r;
+    ntimeout.tv_usec = 0;
+     ifstream file(sourceCodeFile);
+    string sourceCode((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
+    file.close();
+    char buffer[MAX_BUFFER_SIZE];
+    timeval Tsend,Trecv,diff,sum,ti,te;
+    sum.tv_sec=0,sum.tv_usec=0;
+    memset(buffer, 0, sizeof(buffer));
+    gettimeofday(&ti, NULL); 
+    for(int i=0;i<lp;i++){
     if ((clientSocket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         cerr << "Error creating socket." << endl;
         return 1;
@@ -34,16 +49,16 @@ int main(int argc, char* argv[]) {
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(atoi(serverPort));
     serverAddr.sin_addr.s_addr = inet_addr(serverAddress);
-    int lp=atoi(argv[3]);
-    int sl=atoi(argv[4]);
+  
     int timeoutSeconds = atoi(argv[5]);
            if ( connect(clientSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
+                errors++;
                 cout << "Number of successful responses:"<<0<< endl;
 		cout << "Total time elapsed between each request and response in microseconds:" << timeoutSeconds * 1000000 << endl;
 		cout << "Avg response time in microseconds: " << timeoutSeconds * 1000000 << endl;
 		cout << "Throughput:"<<suc<< endl;
 		cout << "Time taken by loop in seconds: " << timeoutSeconds * 1000000 << endl;
-		cout << "errors:" << lp << endl;
+		cout << "errors:" << errors << endl;
 		cout << "timeout:" << 0<< endl;
 		cout << "Request rate sent:"<<req<<endl;
 		cout << "Successful request rate(Goodput):"<<suc<<endl;
@@ -57,25 +72,12 @@ int main(int argc, char* argv[]) {
     FD_ZERO(&readSet);
     FD_SET(clientSocket, &readSet);
     // Set a timeout using setsockopt
-    struct timeval ntimeout;
-    int r=atoi(argv[5]);
-    ntimeout.tv_sec = r;
-    ntimeout.tv_usec = 0;
+    
     if (setsockopt(clientSocket, SOL_SOCKET,SO_RCVTIMEO, (char *)&ntimeout,sizeof(ntimeout))) {
         perror("setsockopt");
        // exit(EXIT_FAILURE);
     }   
-    ifstream file(sourceCodeFile);
-    string sourceCode((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
-    file.close();
-    char buffer[MAX_BUFFER_SIZE];
-    timeval Tsend,Trecv,diff,sum,ti,te;
-    sum.tv_sec=0,sum.tv_usec=0;
-    memset(buffer, 0, sizeof(buffer));
-    gettimeofday(&ti, NULL);
-    
-     
-    for(int i=0;i<lp;i++){
+   
     // Send the source code to the server
     gettimeofday(&Tsend, NULL);
     ssize_t bytesSent = send(clientSocket, sourceCode.c_str(), sourceCode.size(), 0);
@@ -92,7 +94,8 @@ int main(int argc, char* argv[]) {
 
 	if (selectResult == 0) {
 	    timeout++;
-	} else {
+	} 
+	else {
 	    // Data is ready to be received
 	    ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
 	       if (bytesRead < 0) {
@@ -101,21 +104,13 @@ int main(int argc, char* argv[]) {
 		cout<<"connection closed"<<endl;
 	    } else {
 	    
-		gettimeofday(&Trecv, NULL);
+	       gettimeofday(&Trecv, NULL);
 	       suc++;
 	    }
 	}
-    
-    
-    
-    
-    
-    
-    
-    
-    
-   /* ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
-    if (bytesRead==-1) {
+
+     /* ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer), 0);
+      if (bytesRead==-1) {
 	  if (errno == EAGAIN || errno == EWOULDBLOCK|| errno == ETIMEDOUT){
 		timeout++;
 		cout<<"XXXXXXXXXXXXXXXXXX";
@@ -154,6 +149,7 @@ int main(int argc, char* argv[]) {
         x.tv_sec--;
         x.tv_usec += 1000000; // 1,000,000 microseconds in a second
     }
+   
     close(clientSocket);
     int q=te.tv_sec-ti.tv_sec;
     cout<<"Number of successful responses:"<<suc<<endl;
@@ -167,4 +163,3 @@ int main(int argc, char* argv[]) {
     cout<<"Successful request rate(Goodput):"<<req*(1000000.0/(sum.tv_usec))<<endl;
     return 0;
 }
-

@@ -27,7 +27,16 @@ int main(int argc, char* argv[]) {
 
     // Create socket
      // Connect to the server
+    int lp=atoi(argv[3]);
+    int sl=atoi(argv[4]);
+    char buffer[MAX_BUFFER_SIZE];
+    timeval Tsend,Trecv,diff,sum,ti,te;
+    sum.tv_sec=0,sum.tv_usec=0;
+    float suc=0;
+    gettimeofday(&ti, NULL);
     
+    
+    for(int i=0;i<lp;i++){
     
     if ((clientSocket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         cerr << "Error creating socket." << endl;
@@ -49,16 +58,7 @@ int main(int argc, char* argv[]) {
     file.close();
     
     
-    int lp=atoi(argv[3]);
-    int sl=atoi(argv[4]);
-    char buffer[MAX_BUFFER_SIZE];
-    timeval Tsend,Trecv,diff,sum,ti,te;
-    sum.tv_sec=0,sum.tv_usec=0;
-    float suc=0;
-    gettimeofday(&ti, NULL);
-    
-    
-    for(int i=0;i<lp;i++){
+   
     // Send the source code to the server
     gettimeofday(&Tsend, NULL);
     ssize_t bytesSent = send(clientSocket, sourceCode.c_str(), sourceCode.size(), 0);
@@ -98,7 +98,6 @@ int main(int argc, char* argv[]) {
     gettimeofday(&te, NULL);
     
     close(clientSocket);
-    cout<<"Number of successful responses:"<<suc<<"\ntotal time elapsed between each request and response in microseconds: "<<sum.tv_usec<<"\nAvg response time in microseconds: "<<sum.tv_usec/float(lp)<<"\nThroughput:"<<(suc)*(1000000.0/sum.tv_usec)<<"\ntime taken by loop in seconds: "<<te.tv_sec-ti.tv_sec<<"\n";
+    cout<<"Number of successful responses:"<<suc<<"\ntotal time elapsed between each request and response in microseconds: "<<sum.tv_usec<<"\nAvg response time in microseconds: "<<sum.tv_usec/float(lp)<<"\nThroughput:"<<suc*(1000000.0/((sum.tv_usec)))<<"\ntime taken by loop in seconds: "<<te.tv_sec-ti.tv_sec<<"\n";
     return 0;
 }
-

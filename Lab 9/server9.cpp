@@ -16,28 +16,25 @@ const int MAX_BUFFER_SIZE = 10000;
 pthread_mutex_t lck,lc;
 pthread_cond_t cond;
 int counter =0;
+float queue_size=0;
 queue<int> requestQueue;
 struct ThreadData {
     int clientSocket;
     char buffer[MAX_BUFFER_SIZE];
 };
 
-
 bool isOutputCorrect(const string& programOutput) {
     string expectedOutput = "1 2 3 4 5 6 7 8 9 10";
     return programOutput == expectedOutput;
 }
 void *handlereq(void *data){
-  while(1){
-   
     pthread_mutex_lock(&lck);
-    counter++;
+    counter++; 
     int g=counter;
     ThreadData *threadData = static_cast<ThreadData *>(data);
     int clientSocket = threadData->clientSocket;
     memset(threadData->buffer, 0, sizeof(threadData->buffer));
     char *buffer = threadData->buffer;
-    
     // Receive source code from the client
     ssize_t bytesRead = recv(clientSocket, buffer, sizeof(threadData->buffer), 0);
     pthread_mutex_unlock(&lck);
@@ -67,6 +64,8 @@ void *handlereq(void *data){
         string response = "COMPILER ERROR\n" + compileError;
         pthread_mutex_lock(&lck);
         send(clientSocket, response.c_str(), response.size(), 0);
+        system(("echo "+to_string(queue_size/counter)+" >>abc.txt").c_str());
+        close(clientSocket);
         pthread_mutex_unlock(&lck);
         errorFile.close();
         // Remove the temporary compile error file
@@ -76,7 +75,8 @@ void *handlereq(void *data){
         if (remove(tempFileName.c_str()) != 0) {
             cerr << "Error deleting temporary student_code file." << endl;
         }
-        continue;
+        return nullptr;
+        //continue;
     }
 
     // Execute the code
@@ -93,6 +93,13 @@ void *handlereq(void *data){
         ifstream err(("runtime_error_"+to_string(g)+".txt").c_str());
         string runtimeError((istreambuf_iterator<char>(err)), istreambuf_iterator<char>());
         err.close();
+        
+        pthread_mutex_lock(&lck);
+        string response = "RUNTIME ERROR\n" + runtimeError;
+        send(clientSocket, response.c_str(), response.size(), 0);
+        system(("echo "+to_string(queue_size/counter)+" >>abc.txt").c_str());
+        close(clientSocket);
+        pthread_mutex_unlock(&lck);
         if ((remove(("runtime_error_" + to_string(g) + ".txt").c_str())) != 0) {
             cerr << "Error deleting temporary runtime error file." << endl;
         }
@@ -105,11 +112,8 @@ void *handlereq(void *data){
         if (remove(tempFileName.c_str()) != 0) {
             cerr << "Error deleting temporary student_code file." << endl;
         }
-        pthread_mutex_lock(&lck);
-        string response = "RUNTIME ERROR\n" + runtimeError;
-        
-        send(clientSocket, response.c_str(), response.size(), 0);
-        pthread_mutex_unlock(&lck);
+       
+        return nullptr;
         
     } else {
         // Capture the program's output
@@ -119,10 +123,11 @@ void *handlereq(void *data){
         bool outputCorrect = isOutputCorrect(programOutput);
         // Send the result back to the client
         if (outputCorrect) {
-            pthread_mutex_lock(&lck);
             string response = "PASS";
-            send(clientSocket, response.c_str(), response.size(), 0); 	
-            pthread_mutex_unlock(&lck);
+            pthread_mutex_lock(&lck);
+            send(clientSocket, response.c_str(), response.size(), 0);
+            system(("echo "+to_string(queue_size/counter)+" >>abc.txt").c_str());
+            
             if ((remove(("runtime_error_" + to_string(g) + ".txt").c_str())) != 0) {
                cerr << "Error deleting temporary runtime error file." << endl;
 	    }
@@ -135,7 +140,10 @@ void *handlereq(void *data){
             if (remove(tempFileName.c_str()) != 0) {
             cerr << "Error deleting temporary student_code file." << endl;
            }
-            	
+            close(clientSocket);
+            //cout<<queue_size/counter;
+            pthread_mutex_unlock(&lck);	
+            return nullptr;	
           }
         else {
             // There's an output error, compare it with the expected output
@@ -146,7 +154,8 @@ void *handlereq(void *data){
             err.close();
             string response = "OUTPUT ERROR\n" + OutErr;
             send(clientSocket, response.c_str(), response.size(), 0);
-            
+            system(("echo "+to_string(queue_size/counter)+" >>abc.txt").c_str());
+            close(clientSocket);
             pthread_mutex_unlock(&lck);
             if ((remove(("runtime_error_"+to_string(g)+ ".txt").c_str())) != 0) {
             cerr << "Error deleting temporary runtime error file." << endl;
@@ -163,17 +172,17 @@ void *handlereq(void *data){
            if ((remove(("output_error_"+to_string(g) + ".txt").c_str())) != 0) {
             //cerr << "Error deleting temporary student_error file." << endl;
            }
-          
+          return nullptr;
         }
        
        
         
     }
-    
+    return nullptr;
     // Unlock the mutex and return
     //pthread_mutex_unlock(&lck);
    
-}}  
+}  
 void* workerThread(void* arg) {
     while (true) {
         pthread_mutex_lock(&lc);
@@ -182,11 +191,11 @@ void* workerThread(void* arg) {
             pthread_cond_wait(&cond, &lc);
         }
         // Get the next grading request from the queue
+        //ssize_t rqsz=requestQueue.size();
         int clientSocket = requestQueue.front();
         requestQueue.pop();
-
+        //cout<<queue_size/counter;
         pthread_mutex_unlock(&lc);
-
         // Process the grading request
         ThreadData* threadData = new ThreadData;
         threadData->clientSocket = clientSocket;
@@ -197,8 +206,8 @@ void* workerThread(void* arg) {
     }
 }      
 int main(int argc, char* argv[]) {
-    if (argc != 2) {
-        cerr << "Usage: " << argv[0] << " <port>" << endl;
+    if (argc != 3) {
+        cerr << "Usage: " << argv[0] << " <port>" << " <number_of_threads> " << endl;
         return 1;
     }
 
@@ -228,8 +237,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    cout << "Server listening on port " << atoi(argv[1]) << "..." << endl;
-    
+     cout << "Server listening on port " << atoi(argv[1]) << "..." << endl;
+     int xd=open("abc.txt",O_WRONLY | O_TRUNC | O_CREAT, 0644);
      int fd=open("output.txt",O_WRONLY | O_TRUNC | O_CREAT, 0644);
      string x="1 2 3 4 5 6 7 8 9 10";
      const char *y = x.c_str();
@@ -241,7 +250,7 @@ int main(int argc, char* argv[]) {
     pthread_mutex_init(&lck, nullptr);
     pthread_cond_init(&cond, nullptr);
     pthread_mutex_init(&lc, nullptr);
-     int thread_pool_size = 5;  // Adjust as needed
+     int thread_pool_size = atoi(argv[2]);
 
     pthread_t workerThreads[thread_pool_size];
     
@@ -261,7 +270,9 @@ int main(int argc, char* argv[]) {
 
         // Enqueue the client socket for grading
         requestQueue.push(clientSocket);
-        
+        ssize_t rqsz=requestQueue.size();
+        //cout<<rqsz<<endl;
+        queue_size+=rqsz;
         // Signal a worker thread to process the request
         pthread_cond_signal(&cond);
 
@@ -274,4 +285,3 @@ int main(int argc, char* argv[]) {
      //close(serverSocket);
     return 0;
 }
-
