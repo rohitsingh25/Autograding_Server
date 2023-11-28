@@ -13,7 +13,7 @@
 using namespace std;
 const int MAX_BUFFER_SIZE = 10000;
 char buffer[MAX_BUFFER_SIZE];
-pthread_mutex_t lck = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t lck;
 int counter=0;
 bool isOutputCorrect(const string& programOutput) {
     string expectedOutput = "1 2 3 4 5 6 7 8 9 10";
@@ -24,16 +24,13 @@ struct ThreadData {
     char buffer[MAX_BUFFER_SIZE];
 };
 void *handlereq(void *data){
-  
-   
     pthread_mutex_lock(&lck);
-    counter++;
+    counter++; 
     int g=counter;
     ThreadData *threadData = static_cast<ThreadData *>(data);
     int clientSocket = threadData->clientSocket;
     memset(threadData->buffer, 0, sizeof(threadData->buffer));
     char *buffer = threadData->buffer;
-    
     // Receive source code from the client
     ssize_t bytesRead = recv(clientSocket, buffer, sizeof(threadData->buffer), 0);
     pthread_mutex_unlock(&lck);
@@ -49,7 +46,7 @@ void *handlereq(void *data){
     string compileErrorFileName = "compile_error_" + to_string(g) + ".txt";
 
     // Save the received code to a temporary file with a unique name
-    pthread_mutex_unlock(&lck);
+    //pthread_mutex_unlock(&lck);
     ofstream codeFile(tempFileName);
     codeFile << buffer;
     codeFile.close();
@@ -60,21 +57,15 @@ void *handlereq(void *data){
         // Compilation failed, send the error message back
         ifstream errorFile(compileErrorFileName);
         string compileError((istreambuf_iterator<char>(errorFile)), istreambuf_iterator<char>());
+        errorFile.close();
         string response = "COMPILER ERROR\n" + compileError;
         pthread_mutex_lock(&lck);
         send(clientSocket, response.c_str(), response.size(), 0);
         close(clientSocket);
-        pthread_mutex_unlock(&lck);
-        errorFile.close();
-        // Remove the temporary compile error file
-        if (remove(compileErrorFileName.c_str()) != 0) {
-            cerr << "Error deleting temporary compile error file." << endl;
-        }
-        if (remove(tempFileName.c_str()) != 0) {
-            cerr << "Error deleting temporary student_code file." << endl;
-        }
+        pthread_mutex_unlock(&lck); 
+        system(("rm student_code_" + to_string(g) + ".cpp").c_str());
+        system(("rm compile_error_" + to_string(g) + ".txt").c_str());  
         return nullptr;
-        //continue;
     }
 
     // Execute the code
@@ -91,24 +82,16 @@ void *handlereq(void *data){
         ifstream err(("runtime_error_"+to_string(g)+".txt").c_str());
         string runtimeError((istreambuf_iterator<char>(err)), istreambuf_iterator<char>());
         err.close();
-        if ((remove(("runtime_error_" + to_string(g) + ".txt").c_str())) != 0) {
-            cerr << "Error deleting temporary runtime error file." << endl;
-        }
-         if (remove(compileErrorFileName.c_str()) != 0) {
-            cerr << "Error deleting temporary compile error file." << endl;
-        }
-        if ((remove(("student_output_" + to_string(g) + ".txt").c_str())) != 0) {
-            cerr << "Error deleting temporary student_output file." << endl;
-        }
-        if (remove(tempFileName.c_str()) != 0) {
-            cerr << "Error deleting temporary student_code file." << endl;
-        }
+        
         pthread_mutex_lock(&lck);
         string response = "RUNTIME ERROR\n" + runtimeError;
-        
         send(clientSocket, response.c_str(), response.size(), 0);
         close(clientSocket);
         pthread_mutex_unlock(&lck);
+        system(("rm runtime_error_"+to_string(g)+ ".txt").c_str());
+        system(("rm student_output_"+to_string(g)+ ".txt").c_str());
+        system(("rm student_code_" + to_string(g) + ".cpp").c_str());
+        system(("rm compile_error_" + to_string(g) + ".txt").c_str());   
         return nullptr;
         
     } else {
@@ -124,18 +107,12 @@ void *handlereq(void *data){
             send(clientSocket, response.c_str(), response.size(), 0);
             close(clientSocket);
             pthread_mutex_unlock(&lck);	
-            if ((remove(("runtime_error_" + to_string(g) + ".txt").c_str())) != 0) {
-               cerr << "Error deleting temporary runtime error file." << endl;
-	    }
-            if (remove(compileErrorFileName.c_str()) != 0) {
-               cerr << "Error deleting temporary compile error file." << endl;
-	    }
-	    if ((remove(("student_output_" + to_string(g) + ".txt").c_str())) != 0) {
-	       cerr << "Error deleting temporary student_output file." << endl;
-		}
-            if (remove(tempFileName.c_str()) != 0) {
-            cerr << "Error deleting temporary student_code file." << endl;
-           }
+            system(("rm runtime_error_"+to_string(g)+ ".txt").c_str());
+            system(("rm student_output_"+to_string(g)+ ".txt").c_str());
+            system(("rm student_code_" + to_string(g) + ".cpp").c_str());
+            system(("rm compile_error_" + to_string(g) + ".txt").c_str());              
+            //cout<<queue_size/counter;
+            
             return nullptr;	
           }
         else {
@@ -149,21 +126,11 @@ void *handlereq(void *data){
             send(clientSocket, response.c_str(), response.size(), 0);
             close(clientSocket);
             pthread_mutex_unlock(&lck);
-            if ((remove(("runtime_error_"+to_string(g)+ ".txt").c_str())) != 0) {
-            cerr << "Error deleting temporary runtime error file." << endl;
-            }
-            if (remove(compileErrorFileName.c_str()) != 0) {
-            cerr << "Error deleting temporary compile error file." << endl;
-            }
-            if (remove(tempFileName.c_str()) != 0) {
-            cerr << "Error deleting temporary student_code file." << endl;
-           }
-            if ((remove(("student_output_"+to_string(g) + ".txt").c_str())) != 0) {
-            cerr << "Error deleting temporary student_output file." << endl;
-           }
-           if ((remove(("output_error_"+to_string(g) + ".txt").c_str())) != 0) {
-            //cerr << "Error deleting temporary student_error file." << endl;
-           }
+            system(("rm runtime_error_"+to_string(g)+ ".txt").c_str());
+            system(("rm student_output_"+to_string(g)+ ".txt").c_str());
+            system(("rm output_error_"+to_string(g)+ ".txt").c_str());
+            system(("rm student_code_" + to_string(g) + ".cpp").c_str());
+            system(("rm compile_error_" + to_string(g) + ".txt").c_str());    
           return nullptr;
         }
        
@@ -202,13 +169,13 @@ int main(int argc, char* argv[]) {
     }
 
     // Listen for incoming connections
-    if (listen(serverSocket, 100) == -1) {
+    if (listen(serverSocket, 1000) == -1) {
         cerr << "Error listening for connections." << endl;
         return 1;
     }
 
-    cout << "Server listening on port " << atoi(argv[1]) << "..." << endl;
-    
+     cout << "Server listening on port " << atoi(argv[1]) << "..." << endl;
+     pthread_mutex_init(&lck, nullptr);
      int fd=open("output.txt",O_WRONLY | O_TRUNC | O_CREAT, 0644);
      string x="1 2 3 4 5 6 7 8 9 10";
      const char *y = x.c_str();

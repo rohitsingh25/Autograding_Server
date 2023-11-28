@@ -4,7 +4,7 @@ a=$1
 b=$1
 loop=$2
 sleeptime=$3
-g++ tryserv.cpp -o server
+#g++ tryserv.cpp -o server
 #CPU_AFFINITY="0,1"
 #./server 1829 &
 #server_pid=$!
@@ -25,19 +25,19 @@ echo "Clients Error_rate" > "$error_rate_file"
 echo "Clients Timeout_rate" > "$timeout_rate_file"
 echo "Clients req_rate" > "$req_rate_file"
 # Loop for varying numbers of clients
-for ((j=1; j<=2; j++)); do
+for ((j=1; j<=20; j++)); do
     for ((i=1; i<=$numclients; i++)); do        
           #otpt=$(./submit 127.0.0.1:1830 test.cpp "$loop" "$sleeptime" 1000 &) 
-          (./submit 127.0.0.1:1831 test.cpp "$loop" "$sleeptime" 9000 > "otpt_$j$i.txt") &
-          (timeout $((loop * sleeptime * numclients + 5)) mpstat -P 0,1 10 >> "cpu_utilization$j.txt") &
-          (ps -C server -Lf >> "active_threads$j.txt") &
+          (./submit 127.0.0.1:1832 test.cpp "$loop" "$sleeptime" 15000 > "otpt_$j$i.txt") &
+          (timeout $((loop * sleeptime * numclients)) mpstat -P 0,1 10 >> "cpu_utilization$j.txt") &
+          (ps -C server9 -Lf >> "active_threads$j.txt") &
           #f_name="otpt_$j$i.txt"
           #echo "$otpt" > "$f_name"    
     done
     wait
-    average_requests_in_queue=$(awk '{sum+=$1} END {print sum/(NR+1)}' "abc.txt")
+    average_requests_in_queue=$(awk '{sum+=$1} END {print sum/NR}' "abc.txt")
     echo "$((numclients)) $average_requests_in_queue" >> "$Average_number_of_request_in_queue_file"
-    #sed -i '/UID/d' "active_threads$j.txt"
+    sed -i '/UID/d' "active_threads$j.txt"
     sed -i '/CPU/d' "cpu_utilization$j.txt"
      # Calculate average number of active threads from the ps output
     average_active_threads=$(awk '{sum+=$6} END {print sum/(NR+1)}' "active_threads$j.txt")
@@ -48,12 +48,12 @@ for ((j=1; j<=2; j++)); do
     rm "cpu_utilization$j.txt"
     echo "$(($numclients)) $average_cpu_utilization" >> "$cpu_utilization_file"
     # Changing the number of clients for the next iteration by a step size equal to 10
-    numclients=$(($numclients+10))  
+    numclients=$(($numclients+3))  
 done
 
 # Kill the server after all iterations
 #killall server
-for ((j=1; j<=2; j++)); do
+for ((j=1; j<=20; j++)); do
 th=0
 overallThroughput=0
 resTime=0
@@ -98,13 +98,13 @@ echo "$(($a)) $err" >> "$error_rate_file"
 echo "$(($a)) $tmt" >> "$timeout_rate_file"
 # Append data to req.txt
 echo "$(($a)) $treqrate" >> "$req_rate_file"
-a=$((a+10))
+a=$((a+3))
 done
-for ((j=1; j<=2; j++)); do
+for ((j=1; j<=20; j++)); do
 	for ((i=1; i<=$b; i++)); do
 	rm "otpt_$j$i.txt"
 done 
-b=$((b+9))	
+b=$((b+3))	
 done
 # Use Gnuplot to create the throughput graph
 gnuplot <<EOF
@@ -189,7 +189,7 @@ set ylabel "Average number of request in queue"
 set grid
 plot "$Average_number_of_request_in_queue_file"  using 1:2 with linespoints title "Average number of request in the queue"
 EOF
-
+#rm *.txt
 #XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ############################################################################
 ######################   version 3 ended	############################
@@ -221,34 +221,33 @@ echo "Clients Error_rate" > "$error_rate_file_v2"
 echo "Clients Timeout_rate" > "$timeout_rate_file_v2"
 echo "Clients req_rate" > "$req_rate_file_v2"
 # Loop for varying numbers of clients
-for ((j=1; j<=2; j++)); do
+for ((j=1; j<=20; j++)); do
     for ((i=1; i<=$numclients; i++)); do        
           #otpt=$(./submit 127.0.0.1:1829 test.cpp "$loop" "$sleeptime" 5 &) 
-          (./submit 127.0.0.1:1829 test.cpp "$loop" "$sleeptime" 9000 > "otpt_$j$i.txt") &
-          (timeout $((loop * sleeptime * numclients + 5)) mpstat -P 0,1 10 >> "cpu_utilization$j.txt") &
-          (ps -C server -Lf >> "active_threads$j.txt") &
+          (./submit 127.0.0.1:1829 test.cpp "$loop" "$sleeptime" 15000 > "otpt_$j$i.txt") &
+          (timeout $((loop * sleeptime * numclients)) mpstat -P 0,1 10 >> "cpu_utilizationn$j.txt") &
+          (ps -C server8 -Lf >> "active_threadss$j.txt") &
           #f_name="otpt_$j$i.txt"
           #echo "$otpt" > "$f_name"    
     done
     wait
-    #sed -i '/UID/d' "active_threads$j.txt"
-    sed -i '/CPU/d' "cpu_utilization$j.txt"
+    sed -i '/UID/d' "active_threadss$j.txt"
+    sed -i '/CPU/d' "cpu_utilizationn$j.txt"
      # Calculate average number of active threads from the ps output
-    average_active_threads=$(awk '{sum+=$6} END {print sum/(NR+1)}' "active_threads$j.txt")
-    echo "$(($numclients)) $average_active_threads" >> "$active_threads_file" 
-    rm "active_threads$j.txt"
+    average_active_threads=$(awk '{sum+=$6} END {print sum/(NR+1)}' "active_threadss$j.txt")
+    echo "$(($numclients)) $average_active_threads" >> "$active_threads_file_v2" 
+    rm "active_threadss$j.txt"
     # Calculate average CPU utilization from the vmstat output
-    average_cpu_utilization=$(awk '{sum+=100-$14} END {print sum/(NR+1)}' "cpu_utilization$j.txt")
-    rm "cpu_utilization$j.txt"
-    echo "$(($numclients)) $average_cpu_utilization" >> "$cpu_utilization_file"
+    average_cpu_utilization=$(awk '{sum+=100-$14} END {print sum/(NR+1)}' "cpu_utilizationn$j.txt")
+    rm "cpu_utilizationn$j.txt"
+    echo "$(($numclients)) $average_cpu_utilization" >> "$cpu_utilization_file_v2"
     # Changing the number of clients for the next iteration by a step size equal to 10
-    numclients=$(($numclients+10)) 
-    loop=$(($loop+5))  
+    numclients=$(($numclients+3)) 
 done
 
 # Kill the server after all iterations
 #killall server
-for ((j=1; j<=2; j++)); do
+for ((j=1; j<=20; j++)); do
 th=0
 overallThroughput=0
 resTime=0
@@ -293,13 +292,13 @@ echo "$(($a)) $err" >> "$error_rate_file_v2"
 echo "$(($a)) $tmt" >> "$timeout_rate_file_v2"
 # Append data to req.txt
 echo "$(($a)) $treqrate" >> "$req_rate_file_v2"
-a=$((a+10))
+a=$((a+3))
 done
-for ((j=1; j<=2; j++)); do
+for ((j=1; j<=20; j++)); do
 	for ((i=1; i<=$b; i++)); do
 	rm "otpt_$j$i.txt"
 done 
-b=$((b+9))	
+b=$((b+3))	
 done
 # Use Gnuplot to create the throughput graph
 gnuplot <<EOF
@@ -374,6 +373,7 @@ set ylabel "Request Sent Rate"
 set grid
 plot "$req_rate_file_v2"  using 1:2 with linespoints title "Request Sent Rate"
 EOF
+#rm *.txt
 #XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ############################################################################
 ######################   version 2 ended	############################
@@ -384,7 +384,7 @@ a=$1
 b=$1
 loop=$2
 sleeptime=$3
-g++ server7.cpp -o server
+#g++ server7.cpp -o server
 #./server 1528 &
 sleep 2
 g++ client7.cpp -o submit
@@ -394,7 +394,7 @@ response_time_file_a="response_time_data_a.txt"
 echo "Clients Throughput" > "$throughput_file_a"
 echo "Clients AverageResponseTime" > "$response_time_file_a"
 #for loop  for varying number of clients
-for ((j=1; j<=2; j++)); do
+for ((j=1; j<=20; j++)); do
 for ((i=1; i<=$numclients; i++)); do
     #otpt=$(./submit 127.0.0.1:1528 test.cpp "$loop" "$sleeptime" &)
     (./submit 127.0.0.1:1821 test.cpp "$loop" "$sleeptime" > "otpt_$j$i.txt") &
@@ -403,13 +403,13 @@ for ((i=1; i<=$numclients; i++)); do
 done
 wait
 #changing number of clients for next iteration by a step size equal to 10
-numclients=$(($numclients + 10))
+numclients=$(($numclients + 3))
 done
 # Kill the server after all iterations
 #killall server
 
 
-for ((j=1; j<=2; j++)); do
+for ((j=1; j<=20; j++)); do
 th=0
 overallThroughput=0
 resTime=0
@@ -429,13 +429,13 @@ res=$(echo "scale=6; $resTime / $totalN" | bc -l)
 echo "$(($a)) $th" >> "$throughput_file_a"
 # Append data to response time file
 echo "$(($a)) $res" >> "$response_time_file_a"
-a=$((a + 10))
+a=$((a + 3))
 done
-for ((j=1; j<=2; j++)); do
+for ((j=1; j<=20; j++)); do
 	for ((i=1; i<=$b; i++)); do
 	rm "otpt_$j$i.txt"
 done 
-b=$((b+9))	
+b=$((b+3))	
 done
 # Use Gnuplot to create the throughput graph
 gnuplot <<EOF
@@ -482,3 +482,4 @@ plot "$response_time_file" using 1:2 with linespoints title "Response Time ver3"
 EOF
 
 echo "Graphs created"
+rm *.txt

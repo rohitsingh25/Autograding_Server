@@ -45,7 +45,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Listen for incoming connections
-    if (listen(serverSocket, 100) == -1) {
+    if (listen(serverSocket, 1000) == -1) {
         cerr << "Error listening for connections." << endl;
         return 1;
     }
@@ -101,6 +101,7 @@ int main(int argc, char* argv[]) {
             string compileError((istreambuf_iterator<char>(errorFile)), istreambuf_iterator<char>());
             string response = "COMPILER ERROR\n" + compileError;
             send(clientSocket, response.c_str(), response.size(), 0);
+            close(clientSocket);
             errorFile.close();
              if (remove("compile_error.txt") != 0) {
             cerr << "Error deleting temporary code file." << endl;
@@ -121,6 +122,7 @@ int main(int argc, char* argv[]) {
             string runtimeError((istreambuf_iterator<char>(err)), istreambuf_iterator<char>());
             string response = "RUNTIME ERROR\n"+runtimeError;
             send(clientSocket, response.c_str(), response.size(), 0);
+            close(clientSocket);
             err.close();
             //close(clientSocket);
             if (remove("runtime_error.txt") != 0) {
@@ -146,13 +148,14 @@ int main(int argc, char* argv[]) {
         string OutErr((istreambuf_iterator<char>(err)), istreambuf_iterator<char>());
         OutErr="OUTPUT ERROR\n"+OutErr;
         send(clientSocket, OutErr.c_str(), OutErr.size(), 0);
+        close(clientSocket);
         err.close();
         if (remove("output_error.txt") != 0) {
             cerr << "Error deleting temporary code file." << endl;
             }
          
         }
-        else{send(clientSocket, response.c_str(), response.size(), 0);   }
+        else{send(clientSocket, response.c_str(), response.size(), 0);  close(clientSocket); }
          if (remove("student_output.txt") != 0) {
             cerr << "Error deleting temporary code file." << endl;
             }
