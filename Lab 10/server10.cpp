@@ -10,15 +10,21 @@
 #include <fcntl.h>
 #include<pthread.h>
 #include<sys/types.h>
+#include<sys/wait.h>
 #include<queue>
 using namespace std;
 
 const int MAX_BUFFER_SIZE = 10000;
 pthread_mutex_t lck,q,old,lc,counter_lock;
 pthread_cond_t cond;
-
 float queue_size=0,done_req=0;
-queue<int> requestQueue;
+
+struct ThreadData {
+    int clientSocket;
+    long long int counter;
+};
+
+queue<ThreadData> requestQueue;
 
 map<long long int, string> compile_err;
 map<long long int, string> runtime_err;
@@ -26,139 +32,336 @@ map<long long int, string> diff_err;
 map<long long int, string> pass;
 map<long long int, int> in_queue;
 map<long long int, int> still_processing;
+// map<long lo>
 
 
-struct ThreadData {
-    int clientSocket;
-    // char buffer[MAX_BUFFER_SIZE];
-    long long int counter =0;
-};
 
-
-// rohit struct
-// struct ThreadData {
-//     int clientSocket;
-//     char buffer[MAX_BUFFER_SIZE];
-//     // long long int counter =0;
-// };
 // rohit global variable
 long long int counter =0;
 
-
-// ThreadData* threadData = new ThreadData;
-bool isOutputCorrect(const string& programOutput) {
+bool isOutputCorrect(const string& programOutput) 
+{
     string expectedOutput = "1 2 3 4 5 6 7 8 9 10";
     return programOutput == expectedOutput;
 }
-void *handlereq_new(void *data){
-    pthread_mutex_lock(&lck);    
-    ThreadData *threadData = static_cast<ThreadData *>(data);
-    long long int g=threadData->counter;
-    int clientSocket = (threadData->clientSocket);
-    // int clientSocket = *clientSocket1;
-    // cout<<clientSocket<<endl;
-    // cout<<clientSocket<<" serving handle request"<<endl;
-    // memset(threadData->buffer, 0, sizeof(threadData->buffer));
-    char *buffer = new char[MAX_BUFFER_SIZE];
-    // Receive source code from the client
-    pthread_mutex_unlock(&lck);
-    ssize_t bytesRead = recv(clientSocket, buffer, MAX_BUFFER_SIZE, 0);
-    
-    if (bytesRead == 0 || bytesRead == -1) {
-        // Closing the connection with the client when no data is sent by it
-        // pthread_mutex_lock(&lck);
-        close(clientSocket);
-        // pthread_mutex_unlock(&lck);
-        return nullptr;
+
+void addElementFromQueueToFile(int element) 
+{
+    ofstream file("queue_backup.txt", ios::out | ios::trunc);
+    file << element << endl;
+    cout<<element<<" pushed in file"<<endl;
+    file.close();
+}
+// Function to remove the first line from the file
+void removeRequestIDFromFile(int req_id) 
+{
+    ifstream inFile("queue_backup.txt");
+    if (!inFile.is_open()) 
+    {
+        cout << "File not found or unable to open!" << endl;
+        return;
     }
-    string req_id=to_string(g); 
-    still_processing[g]=clientSocket;
-    ssize_t byteswrite = send(clientSocket, req_id.c_str(), req_id.size(), 0);
-    // Generate a unique file name for each thread
-    string tempFileName = "student_code_" + to_string(g) + ".cpp";
-    string res = "res" + to_string(g) + ".txt";
-    // Save the received code to a temporary file with a unique name
-    //pthread_mutex_unlock(&lck);
-    ofstream codeFile(tempFileName);
-    codeFile << buffer;
-    codeFile.close();
-    // Compile the code
-    int compileResult = system(("g++ -o student_program_" + to_string(g) + " " + tempFileName + " 2> " + res).c_str());   
-    if (compileResult != 0) {
-        compile_err[g]="COMPILER ERROR";
-        system(("rm " + tempFileName).c_str());
+    string line;
+    // Read and discard the first line from the file
+    // getline(inFile, line); 
+    // for debugging - 1
+    // cout<<line<<" poped from file"<<endl;
+    ofstream outFile("temp.txt");
+    while (getline(inFile, line)) 
+    {
+        istringstream iss(line);
+        int id;
+        if (iss >> id && id == req_id)
+            continue;
+        // cout<<"status of getline : "<<line;
+        outFile << line << std::endl;
+    }
+    inFile.close();
+    outFile.close();
+    remove("queue_backup.txt");
+    rename("temp.txt", "queue_backup.txt");
+}
+
+void reinitializeQueueFromFile(string FILE_NAME) 
+{
+    ifstream file(FILE_NAME);
+    if (!file.is_open()) 
+    {
+        cout << "File not found or unable to open!" << endl;
+        return;
+    }
+
+    string line;
+    while (getline(file, line)) 
+    {
+        int value;
+        istringstream iss(line);
+        if (iss >> value) {
+            ThreadData td ;
+            td.clientSocket=0;
+            td.counter=value;
+            requestQueue.push(td);
+        }
+    }
+    file.close();
+}
+
+void reinitializeQueueFromFilesp(string FILE_NAME) 
+{
+    ifstream file(FILE_NAME);
+    if (!file.is_open()) 
+    {
+        cout << "File not found or unable to open!" << endl;
+        return;
+    }
+    string line;
+    while (getline(file, line)) 
+    {
+        stringstream ss(line);
+        long long int key;
+        int value;
+        ss >> key;
+        char comma;
+        ss >> comma; // Read the comma separating key and value
+        ss >> value;
+        ThreadData td ;
+        td.clientSocket=value;
+        td.counter=key;
+        requestQueue.push(td);
+    }
+    file.close();
+    cout << "Map data loaded from file." << endl;
+}
+
+void addEntryToCSVis(long long int key, const string& value , string FILE_NAME) {
+    ofstream file(FILE_NAME, ios::app); 
+    if (file.is_open()) {
+        file << key << "," << value << endl;
+        file.close();
+    } 
+    else 
+    {
+        cout << "Unable to open file for adding entry." << endl;
+    }
+}
+
+void loadMapFromFileis(map<long long int , string>&mp,string FILE_NAME) {
+    ifstream file(FILE_NAME);
+    if (file.is_open()) 
+    {
+        string line;
+        while (getline(file, line)) 
+        {
+            stringstream ss(line);
+            long long key;
+            string value;
+            getline(ss, line, ',');
+            ss >> value;
+            key = stoll(line);
+            mp[key] = value;
+        }
+        file.close();
+        // cout << "Map data loaded from file." << endl;
+    } 
+    else 
+    {
+        cout << "File not found or unable to open." << endl;
+    }
+}
+
+void addEntryToCSVii(long long int key, int value , string FILE_NAME) {
+    ofstream file(FILE_NAME, ios::app); 
+    if (file.is_open()) 
+    {
+        file << key << "," << value << endl;
+        file.close();
+    } 
+    else 
+    {
+        cout << "Unable to open file for adding entry." << endl;
+    }
+}
+
+void loadMapFromFileii(map<long long int , int>&mp , string FILE_NAME) {
+    ifstream file(FILE_NAME);
+    if (file.is_open()) 
+    {
+        string line;
+        while (getline(file, line)) 
+        {
+            stringstream ss(line);
+            long long int key;
+            int value;
+            ss >> key;
+            char comma;
+            ss >> comma; // Read the comma separating key and value
+            ss >> value;
+            mp[key] = value;
+        }
+        file.close();
+        cout << "Map data loaded from file." << endl;
+    } 
+    else 
+    {
+        cout << "File not found or unable to open." << endl;
+    }
+}
+
+
+void counterReintialize()
+{
+    ifstream file("counter.txt");
+    if (!file.is_open()) 
+    {
+        // cout << "File not found or unable to open!" << endl;
+        return;
+    }
+    int c = 0;
+    string line;
+    if (getline(file, line)) {
+        istringstream iss(line);
+        if (!(iss >> c)) 
+        {
+            counter = 0;
+        }
+    }
+    file.close();
+    cout << "counter loaded from file." << endl;
+}
+
+void updateCounter()
+{
+    ofstream outFile("counter.txt", ofstream::trunc);
+    if (!outFile) {
+        std::cerr << "Unable to open file!" << std::endl;
+        return;
+    }
+    outFile << counter << endl;
+    outFile.close();
+}
+
+void reinitializeData()
+{
+    reinitializeQueueFromFile("queue_backup.txt");
+    counterReintialize();
+
+    // loadMapFromFileis(compile_err,"compile_err.csv");
+    // loadMapFromFileis(runtime_err,"runtime_err.csv");
+    // loadMapFromFileis(diff_err,"diff_err.csv");
+    // loadMapFromFileis(pass,"pass.csv");
+
+    // loadMapFromFileii(in_queue,"still_processing.csv");
+
+    cout<<"Data reinitialized"<<endl;
+}
+
+void *handlereq_new(ThreadData threadData)
+{
+    pthread_mutex_lock(&lck);    
+    // ThreadData *threadData = static_cast<ThreadData *>(data);
+    int clientSocket = (threadData.clientSocket);
+    char *buffer = new char[MAX_BUFFER_SIZE];
+    pthread_mutex_unlock(&lck);
+    if(clientSocket!=0)
+    {
+        ssize_t bytesRead = recv(clientSocket, buffer, MAX_BUFFER_SIZE, 0);
+        
+        if (bytesRead == 0 || bytesRead == -1) {
+            // Closing the connection with the client when no data is sent by it
+            close(clientSocket);
+            return nullptr;
+        }
+        
+        string req_id=to_string(threadData.counter); 
+        
+        ssize_t byteswrite = send(clientSocket, req_id.c_str(), req_id.size(), 0);
+        still_processing[threadData.counter]=0;
+        addElementFromQueueToFile(threadData.counter);
+
         close(clientSocket);
+        // Generate a unique file name for each thread
+    }
+    string tempFileName = "student_code_" + to_string(threadData.counter) + ".cpp";
+    string res = "res" + to_string(threadData.counter) + ".txt";
+        
+        // Save the received code to a temporary file with a unique name
+    if(clientSocket!=0)
+    {   ofstream codeFile(tempFileName);
+        codeFile << buffer;
+        codeFile.close();
+    }
+    
+    
+    // Compile the code
+    int compileResult = system(("g++ -o student_program_" + to_string(threadData.counter) + " " + tempFileName + " 2> " + res).c_str());   
+    
+    if (compileResult != 0) 
+    {
+        compile_err[threadData.counter]="COMPILER ERROR";
+        system(("rm " + tempFileName).c_str());
+        // close(clientSocket);
+        still_processing.erase(still_processing.find(threadData.counter));
+        removeRequestIDFromFile(threadData.counter);
         return NULL;
     }
-    int executionResult = system(("./student_program_" + to_string(g) + " 1>student_output_"+to_string(g)+".txt 2> " + res).c_str());
-    if (executionResult != 0) {
-       runtime_err[g]="RUNTIME ERROR";
+    
+    int executionResult = system(("./student_program_" + to_string(threadData.counter) + " 1>student_output_"+to_string(threadData.counter)+".txt 2> " + res).c_str());
+    
+    if (executionResult != 0) 
+    {
+       runtime_err[threadData.counter]="RUNTIME ERROR";
        system(("rm " + tempFileName).c_str());
-       system(("rm student_output_" + to_string(g) + ".txt").c_str());
-       system(("rm student_program_" + to_string(g)).c_str());
-       close(clientSocket);
-       return NULL;
-        
+       system(("rm student_output_" + to_string(threadData.counter) + ".txt").c_str());
+       system(("rm student_program_" + to_string(threadData.counter)).c_str());
+    //    close(clientSocket);
+    //    return NULL;
     } 
     else 
     {
         system(("rm " + tempFileName).c_str());
         
         // Capture the program's output
-        ifstream output_file(("student_output_"+to_string(g)+".txt"));
+        ifstream output_file(("student_output_"+to_string(threadData.counter)+".txt"));
         string programOutput((istreambuf_iterator<char>(output_file)), istreambuf_iterator<char>());
         // Check if the output is correct
         bool outputCorrect = isOutputCorrect(programOutput);
         // Send the result back to the client
         if (outputCorrect) 
         {
-            pass[g]="PASS";
-            system(("cp student_output_" + to_string(g) + ".txt " + res).c_str());
-            system(("rm student_output_" + to_string(g) + ".txt").c_str());
-            system(("rm student_program_" + to_string(g)).c_str());
+            pass[threadData.counter]="PASS";
+            system(("cp student_output_" + to_string(threadData.counter) + ".txt " + res).c_str());
+            system(("rm student_output_" + to_string(threadData.counter) + ".txt").c_str());
+            system(("rm student_program_" + to_string(threadData.counter)).c_str());
             close(clientSocket);
-            return NULL;;	
+            // return nullptr;	
         }
         else 
         {
             // There's an output error, compare it with the expected output
-            diff_err[g]="OUTPUT ERROR";
-            system(("diff student_output_" + to_string(g) + ".txt output.txt > " + res).c_str()); 
-            system(("rm student_output_" + to_string(g) + ".txt").c_str()); 
-            system(("rm student_program_" + to_string(g)).c_str());
-            close(clientSocket);
-            return nullptr;
-        }
-       
-       
-        
+            diff_err[threadData.counter]="OUTPUT ERROR";
+            system(("diff student_output_" + to_string(threadData.counter) + ".txt output.txt > " + res).c_str()); 
+            system(("rm student_output_" + to_string(threadData.counter) + ".txt").c_str()); 
+            system(("rm student_program_" + to_string(threadData.counter)).c_str());
+            // close(clientSocket);
+            // return nullptr;
+        }     
     }
+    still_processing.erase(still_processing.find(threadData.counter));
+    removeRequestIDFromFile(threadData.counter);
     return nullptr;
-   
 }  
 
-void *handlereq_status(void *cs){
-    // pthread_mutex_lock(&lck);
-    // ThreadData *threadData = static_cast<ThreadData *>(data);
-    // int clientSocket = (int)cs;
-
-    int *clientSocket1 = (int*)(cs);
-    int clientSocket = *clientSocket1;
-    // memset(threadData->buffer, 0, sizeof(threadData->buffer));
-    // cout<<clientSocket<<" serving status request"<<endl;
+void *handlereq_status(int clientSocket)
+{
+    // int *clientSocket1 = (int*)(cs);
+    // int clientSocket = *clientSocket1;
     char *buffer = new char[MAX_BUFFER_SIZE];
-    // Receiving the request ID from the client
-
-    while(true)
-    {
+    // while(true)
+    // {
         ssize_t bytesRead = recv(clientSocket, buffer, MAX_BUFFER_SIZE, 0);
-        // cout<<"checking buffer in loop : "<<buffer<<" value of buffer"<<endl;
-        // pthread_mutex_unlock(&lck);
         if (bytesRead == 0 || bytesRead == -1) {
             // Closing the connection with the client when no data is sent by it
-            // pthread_mutex_lock(&lck);
             close(clientSocket);
-            // pthread_mutex_unlock(&lck);
             return nullptr;
         }
         buffer[bytesRead]='\0';
@@ -166,22 +369,11 @@ void *handlereq_status(void *cs){
         long long int convertedValue = strtoll(buffer, &endptr, 10);
         long long int g=convertedValue;
         auto t1=pass.find(g);
-        // cout<<"t1  "<<(t1==pass.end())<<endl;
         auto t2=compile_err.find(g);
-        // cout<<"t1"<<(t1==pass.end())<<endl;
-        // cout<<"t2  "<<(t2==compile_err.end())<<endl;
         auto t3=runtime_err.find(g);
-        // cout<<"t1"<<(t1==pass.end())<<endl;
-        // cout<<"t3  "<<(t3==runtime_err.end())<<endl;
         auto t4=diff_err.find(g);
-        // cout<<"t1"<<(t1==pass.end())<<endl;
-        // cout<<"t4  "<<(t4==diff_err.end())<<endl;
         auto t5=in_queue.find(g);
-        // cout<<"t1"<<(t1==pass.end())<<endl;
-        // cout<<"t5  "<<(t5==in_queue.end())<<endl;
         auto t6=still_processing.find(g);
-        // cout<<"t6  "<<(t6==still_processing.end())<<endl;
-        // cout<<"t1"<<(t1==pass.end())<<endl;  
         if(t1!=pass.end() || t2!=compile_err.end() || t3!=runtime_err.end() || t4!=diff_err.end()) 
         {
             char buf[MAX_BUFFER_SIZE];
@@ -201,12 +393,12 @@ void *handlereq_status(void *cs){
         }
         else if(t6!=still_processing.end())
         {
-            ssize_t bytessent = send(clientSocket, "Request is still being processed",sizeof("Request is still being processed"), 0); 
-            // return nullptr;   
+            ssize_t bytessent = send(clientSocket, "Request is still being processed",sizeof("Request is still being processed"), 0);  
+            return nullptr;
         }
         else if(t5!=in_queue.end()){
             ssize_t bytessent = send(clientSocket, "Request is in queue",sizeof("Request is in queue"), 0);
-            // return nullptr;
+            return nullptr;
         }
         else
         {
@@ -214,71 +406,62 @@ void *handlereq_status(void *cs){
             close(clientSocket);
             return nullptr;
         }
-        // Unlock the mutex and return
-        //pthread_mutex_unlock(&lck);
-    }
+    // }
     return nullptr;
 }  
 
-void* workerThread(void* arg) {
+void* workerThread(void* arg) 
+{
     while (true) 
     {
-      //  pthread_mutex_lock(&lck);
-        while (requestQueue.empty()) {
+        // sleep(1);
+        pthread_mutex_lock(&lc);
+        while (requestQueue.empty()) 
+        {
             // Wait for a grading request in the queue
             pthread_cond_wait(&cond, &lc);
         }
+        pthread_mutex_unlock(&lc);
+        
         // Get the next grading request from the queue
-        //ssize_t rqsz=requestQueue.size();
-        int *clientSocket  = new int;
-        // int clientSocket = requestQueue.front();
-        *clientSocket = requestQueue.front();
-        cout<<*clientSocket<<" poped from queue"<<endl;
+        ThreadData tdc  = requestQueue.front();
         requestQueue.pop();
-        //cout<<queue_size/counter;
-        
+        // removeFirstLineFromFile();
+
         // Process the grading request
-        
-        // threadData->clientSocket = clientSocket;
-        // memset(threadData->buffer, 0, sizeof(threadData->buffer));
-        //threadData->counter=threadData->counter+1;
-        in_queue[counter]=*clientSocket;
-        // cout<<*clientSocket<<" in queue"<<endl<<counter<<" value of counter"<<endl;
-        //pthread_mutex_unlock(&lck);
+        in_queue[counter]= tdc.clientSocket;
 
         char buf[MAX_BUFFER_SIZE];
-        ssize_t bytesRead = recv(*clientSocket, buf, sizeof(buf), 0);
-        
+        ssize_t bytesRead = recv(tdc.clientSocket, buf, sizeof(buf), 0);
         buf[bytesRead]='\0';
         string type(buf);
-        // cout<<buf<<" value of buf"<<endl;
-        ssize_t byteswrite = send(*clientSocket, "ready to serve", sizeof("ready to serve"), 0);
-        // string sst=to_string(counter);
-        // ssize_t byteswrite = send(*clientSocket, sst.c_str(), sizeof(sst), 0); 
-        pthread_t thr;
+        ssize_t byteswrite = send(tdc.clientSocket, "ready to serve", sizeof("ready to serve"), 0);
+        // pthread_t thr;
         if (strcmp(buf, "new") == 0) 
-
-        {   ThreadData * td = new ThreadData;
+        {   
+            ThreadData td;
             pthread_mutex_lock(&counter_lock);
             counter++;  
-            td->counter=counter;
-            td->clientSocket=*clientSocket;
+            updateCounter();
+            td.counter=counter;
+            td.clientSocket=tdc.clientSocket;
             pthread_mutex_unlock(&counter_lock);
-
-            // cout<<counter<<" value after incrementing"<<endl;
-            pthread_create(&thr, nullptr, handlereq_new, td);
+            // pthread_create(&thr, nullptr, handlereq_new, td);
+            handlereq_new(td);
         }
         else
         { 
-        // threadData->counter=threadData->counter+1;
-         pthread_create(&thr, nullptr, handlereq_status, (void *)clientSocket);
+            //  pthread_create(&thr, nullptr, handlereq_status, (void *)clientSocket);
+            sleep(1);
+            handlereq_status(tdc.clientSocket);
+
         }
-        
-        //pthread_join(thr,nullptr);
     }
 }      
-int main(int argc, char* argv[]) {
-    if (argc != 3) {
+int main(int argc, char* argv[]) 
+{
+    if (argc != 3) 
+    {
         cerr << "Usage: " << argv[0] << " <port>" << " <number_of_threads> " << endl;
         return 1;
     }
@@ -308,7 +491,7 @@ int main(int argc, char* argv[]) {
         cerr << "Error listening for connections." << endl;
         return 1;
     }
-
+    reinitializeData();
     // creating file for comparison
      cout << "Server listening on port " << atoi(argv[1]) << "..." << endl;
 
@@ -326,15 +509,14 @@ int main(int argc, char* argv[]) {
     // Initialize mutex and condition variable objects
     pthread_mutex_init(&lck, nullptr);
     pthread_cond_init(&cond, nullptr);
-    // mutex for queue
     pthread_mutex_init(&q, nullptr);
-
     pthread_mutex_init(&old, nullptr);
     pthread_mutex_init(&lc, nullptr);
     pthread_mutex_init(&counter_lock, nullptr);
 
     // Get the number of worker threads from the command line
     int thread_pool_size = atoi(argv[2]);
+    
     //make pool of threads
     pthread_t workerThreads[thread_pool_size];
     
@@ -351,29 +533,16 @@ int main(int argc, char* argv[]) {
             cerr << "Error accepting connection." << endl;
             continue;
         }
-       
-        
-
+        ThreadData tdc;
+        tdc.clientSocket = clientSocket;
+        tdc.counter=0;
         pthread_mutex_lock(&q);
-
         // Enqueue the client socket for grading
-        cout<<clientSocket<<" pushed in queue"<<endl;
-        requestQueue.push(clientSocket);
-        ssize_t rqsz=requestQueue.size();
-        //cout<<rqsz<<endl;
-        queue_size+=rqsz;
+        requestQueue.push(tdc);
+        // addElementFromQueueToFile(clientSocket);
         // Signal a worker thread to process the request
-
         pthread_cond_signal(&cond);
-
-        pthread_mutex_unlock(&q);
-        
-        
-      }
-
-        //for(int i=0;i<thread_pool_size;i++){
-         // pthread_join(thr[i],NULL);}
-     //close(clientSocket);
-     //close(serverSocket);
+        pthread_mutex_unlock(&q);    
+    }
     return 0;
 }
