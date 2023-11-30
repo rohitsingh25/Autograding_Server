@@ -1,5 +1,5 @@
 # DECS-Project
-Course Project of CS744 (Design &amp; Engineering of Computer Systems) under Prof. Varsa Apte
+Course Project of CS744 (Design &amp; Engineering of Computer Systems) under Prof. Varsha Apte
 
 ## Lab 7
 1. client7.cpp
