@@ -192,8 +192,7 @@ int main(int argc, char* argv[])
         }
 
         // printing analysis results on terminal of client
-        cout << "End Result : \n Request ID: " << req_id << endl;
-        cout << "Autograding Result: " << buffer << endl;
+        cout << "Autograding Result of RequestID "<<req_id<<" : " << buffer << endl;
         diff.tv_sec = Trecv.tv_sec - Tsend.tv_sec;
         diff.tv_usec=Trecv.tv_usec-Tsend.tv_usec;
         if (diff.tv_usec < 0) 

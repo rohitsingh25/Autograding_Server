@@ -149,6 +149,14 @@ void counterReintialize()
         {
             counter = 0;
         }
+        else
+        {
+            counter=c;
+        }
+    }
+    else
+    {
+        counter =0;
     }
     file.close();
 }

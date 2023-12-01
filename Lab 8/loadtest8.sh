@@ -1,287 +1,65 @@
-#!/bin/bash
-numclients=$1
-a=$1
-b=$1
-loop=$2
-sleeptime=$3
-g++ server8.cpp -o server
-CPU_AFFINITY="0,1"
-#./server 1829 &
-#server_pid=$!
-sleep 2
-g++ client8.cpp -o submit
-# Create a file to store the Throughput and response time values
-throughput_file="throughput_data.txt"
-response_time_file="response_time_data.txt"
-cpu_utilization_file="cpu_utilization.txt"
-active_threads_file="active_threads.txt"
-error_rate_file="errors.txt"
-timeout_rate_file="tmt.txt"
-req_rate_file="req.txt"
-echo "Clients Throughput" > "$throughput_file"
-echo "Clients AverageResponseTime" > "$response_time_file"
-echo "Clients Error_rate" > "$error_rate_file"
-echo "Clients Timeout_rate" > "$timeout_rate_file"
-echo "Clients req_rate" > "$req_rate_file"
-# Loop for varying numbers of clients
-for ((j=1; j<=10; j++)); do
-    for ((i=1; i<=$numclients; i++)); do        
-          #otpt=$(./submit 127.0.0.1:1829 test.cpp "$loop" "$sleeptime" 5 &) 
-          (./submit 127.0.0.1:1829 test.cpp "$loop" "$sleeptime" 1 > "otpt_$j$i.txt") &
-          (timeout $((loop * sleeptime * numclients + 5)) mpstat -P 0,1 10 >> "cpu_utilization$j.txt") &
-          (ps -C server -Lf >> "active_threads$j.txt") &
-          #f_name="otpt_$j$i.txt"
-          #echo "$otpt" > "$f_name"    
-    done
-    wait
-    #sed -i '/UID/d' "active_threads$j.txt"
-    sed -i '/CPU/d' "cpu_utilization$j.txt"
-     # Calculate average number of active threads from the ps output
-    average_active_threads=$(awk '{sum+=$6} END {print sum/(NR+1)}' "active_threads$j.txt")
-    echo "$(($numclients)) $average_active_threads" >> "$active_threads_file" 
-    # Calculate average CPU utilization from the vmstat output
-    average_cpu_utilization=$(awk '{sum+=100-$14} END {print sum/(NR+1)}' "cpu_utilization$j.txt")
-    echo "$(($numclients)) $average_cpu_utilization" >> "$cpu_utilization_file"
-    # Changing the number of clients for the next iteration by a step size equal to 10
-    numclients=$(($numclients+10)) 
-    loop=$(($loop+5))  
-done
-
-# Kill the server after all iterations
-#killall server
-for ((j=1; j<=10; j++)); do
-th=0
-overallThroughput=0
-resTime=0
-res=0
-totalN=0
-err=0
-terr=0
-tmt=0
-tt=0
-reqrate=0
-treqrate=0
-for ((i=1; i<=$a; i++)); do
-    th=$(grep "Throughput" "otpt_$j$i.txt" | cut -d ':' -f 2)
-    overallThroughput=$(echo "$overallThroughput + $th" | bc -l)
-    err=$(grep "errors" "otpt_$j$i.txt" | cut -d ':' -f 2)
-    terr=$(echo "$terr + $err" | bc -l)
-    tmt=$(grep "timeout" "otpt_$j$i.txt" | cut -d ':' -f 2)
-    tt=$(echo "$tt + $tmt" | bc -l)
-    n=$(grep "Number of successful responses" "otpt_$j$i.txt" | cut -d ':' -f 2)
-    res=$(grep "Avg response time in microseconds" "otpt_$j$i.txt" | cut -d ':' -f 2)
-    resTime=$(echo "$resTime + ($res * $n)" | bc -l)
-    reqrate=$(grep "Request rate sent" "otpt_$j$i.txt" | cut -d ':' -f 2)
-    treqrate=$(echo "$treqrate + $reqrate" | bc -l)
-    totalN=$((totalN + n))   
-done
-if [ "$totalN" -eq 0 ]; then
-    res=500000
-else
-    th=$(echo "scale=6; $overallThroughput" | bc -l)
-    res=$(echo "scale=6; $resTime / $totalN" | bc -l)
-    tmt=$(echo "scale=6; $tt" | bc -l)
-    err=$(echo "scale=6; $terr" | bc -l)
-    
+if [ $# -ne 4 ]; then
+    echo "Usage <number of clients> <loop num> <sleep time> <timeout>"
+    exit
 fi
-# Append data to throughput file
-echo "$(($a)) $overallThroughput" >> "$throughput_file"
-# Append data to response time file
-echo "$(($a)) $res" >> "$response_time_file"
-# Append data to error.txt
-echo "$(($a)) $err" >> "$error_rate_file"
-# Append data to tmt.txt
-echo "$(($a)) $tmt" >> "$timeout_rate_file"
-# Append data to req.txt
-echo "$(($a)) $treqrate" >> "$req_rate_file"
-a=$((a+10))
-done
-for ((j=1; j<=10; j++)); do
-	for ((i=1; i<=$b; i++)); do
-	rm "otpt_$j$i.txt"
-done 
-b=$((b+9))	
-done
-# Use Gnuplot to create the throughput graph
-gnuplot <<EOF
-set terminal png
-set output "Throughput_graph.png"
-set title "Number of Clients vs. Throughput"
-set xlabel "Number of Clients"
-set ylabel "Throughput"
-set grid
-plot "$throughput_file" using 1:2 with linespoints title "Throughput"
-EOF
-# Use Gnuplot to create the throughput graph
-gnuplot <<EOF
-set terminal png
-set output "Response_time_graph.png"
-set title "Number of Clients vs. Response Time"
-set xlabel "Number of Clients"
-set ylabel "Response Time"
-set grid
-plot "$response_time_file" using 1:2 with linespoints title "Response Time"
-EOF
-# Use Gnuplot to create the throughput graph
-gnuplot <<EOF
-set terminal png
-set output "utilization_graph.png"
-set title "Number of Clients vs. CPU Utilization"
-set xlabel "Number of Clients"
-set ylabel "CPU Utilization (%)"
-set grid
-plot "$cpu_utilization_file" using 1:2 with linespoints title "CPU Utilization"
-EOF
+CPU_AFFINITY="0,1"
+g++ -o client client8.cpp
+mkdir -p outputs
+rm -f outputs/*
 
-# Use Gnuplot to create the response time graph
-gnuplot <<EOF
-set terminal png
-set output "active_threads_graph.png"
-set title "Number of Clients vs. Average Active Threads"
-set xlabel "Number of Clients"
-set ylabel "Average Active Threads"
-set grid
-plot "$active_threads_file"  using 1:2 with linespoints title "Active Threads"
-EOF
-# Use Gnuplot to create the error rate graph
-gnuplot <<EOF
-set terminal png
-set output "error_rate_graph.png"
-set title "Number of Clients vs. Error Rate"
-set xlabel "Number of Clients"
-set ylabel "Error Rate"
-set grid
-plot "$error_rate_file"  using 1:2 with linespoints title "ERROR RATE"
-EOF
-
-# Use Gnuplot to create the timeout rate graph
-gnuplot <<EOF
-set terminal png
-set output "timeout_rate_graph.png"
-set title "Number of Clients vs. Timeout Rate"
-set xlabel "Number of Clients"
-set ylabel "Timeout Rate"
-set grid
-plot "$timeout_rate_file"  using 1:2 with linespoints title "TIMEOUT RATE"
-EOF
-
-# Use Gnuplot to create the request sent rate graph
-gnuplot <<EOF
-set terminal png
-set output "req_rate_graph.png"
-set title "Number of Clients vs. Request Sent Rate"
-set xlabel "Number of Clients"
-set ylabel "Request Sent Rate"
-set grid
-plot "$req_rate_file"  using 1:2 with linespoints title "Request Sent Rate"
-EOF
-
-#XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-############################################################################
-#For comparison plotting ver1 graphs and then combined(ver1 and ver2) graphs
-############################################################################
-#XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXxXXXXX
-
-numclients=$1
-a=$1
-b=$1
-loop=$2
-sleeptime=$3
-g++ server7.cpp -o server
-#./server 1528 &
-sleep 2
-g++ client7.cpp -o submit
-# Create a file to store the Throughput and response time values
-throughput_file_a="throughput_data_a.txt"
-response_time_file_a="response_time_data_a.txt"
-echo "Clients Throughput" > "$throughput_file_a"
-echo "Clients AverageResponseTime" > "$response_time_file_a"
-#for loop  for varying number of clients
-for ((j=1; j<=10; j++)); do
-for ((i=1; i<=$numclients; i++)); do
-    #otpt=$(./submit 127.0.0.1:1528 test.cpp "$loop" "$sleeptime" &)
-    (./submit 127.0.0.1:1828 test.cpp "$loop" "$sleeptime" > "otpt_$j$i.txt") &
-    #f_name="otpt_$j$i.txt"
-    #echo "$otpt" > "$f_name"
+for (( i=1 ; i<=$1 ; i++ )); 
+do
+    ./client 127.0.0.1:3002 test.cpp $2 $3 $4 > outputs/op$i.txt &
+    timeout 10 mpstat -P 0,1 5 > outputs/cu.txt &
 done
 wait
-#changing number of clients for next iteration by a step size equal to 10
-numclients=$(($numclients + 10))
-loop=$(($loop+5))
+for (( i=1 ; i<=$1 ; i++ )); 
+do
+	sed -i '/CPU/d' outputs/cu.txt > /dev/null
 done
-# Kill the server after all iterations
-#killall server
+cat outputs/op*.txt | awk '
+    BEGIN{
+    	FS=":";
+        sum=0;
+        total=0;
+        thru=0;
+        th=0;
+        k=0;
+        service_time=0;
+        serv=0;
+    }
+    
+    {
+    	if($1 ~ /Throughput/ ){
+    		thru=thru+$2;
+    		k=k+1;
+    	}
+    	if($1 ~ /total time elapsed between each request and response in microseconds/ ){
+    		ti = $2;
+    	}
+    	if($1 ~ /Avg response time in microseconds/ ){
+    		avg = $2;
+    	}
+        sum=sum+(ti*avg)
+        total=total+ti;
+        
+        th=th+thru;
+      
+    }
 
-
-for ((j=1; j<=10; j++)); do
-th=0
-overallThroughput=0
-resTime=0
-res=0
-totalN=0
-for ((i=1; i<=$a; i++)); do
-    th=$(grep "Throughput" "otpt_$j$i.txt" | cut -d ':' -f 2)
-    overallThroughput=$(echo "$overallThroughput + $th" | bc -l)
-    n=$(grep "Number of successful responses" "otpt_$j$i.txt" | cut -d ':' -f 2)
-    res=$(grep "Avg response time in microseconds" "otpt_$j$i.txt" | cut -d ':' -f 2)
-    resTime=$(echo "$resTime + ($res * $n)" | bc -l)
-    totalN=$((totalN + n))   
-done
-th=$(echo "scale=6; $overallThroughput" | bc -l)
-res=$(echo "scale=6; $resTime / $totalN" | bc -l)
-# Append data to throughput file
-echo "$(($a)) $th" >> "$throughput_file_a"
-# Append data to response time file
-echo "$(($a)) $res" >> "$response_time_file_a"
-a=$((a + 10))
-done
-for ((j=1; j<=10; j++)); do
-	for ((i=1; i<=$b; i++)); do
-	rm "otpt_$j$i.txt"
-done 
-b=$((b+10))	
-done
-# Use Gnuplot to create the throughput graph
-gnuplot <<EOF
-set terminal png
-set output "throughput_graph7.png"
-set title "Number of Clients vs. Throughput"
-set xlabel "Number of Clients"
-set ylabel "Throughput"
-set grid
-plot "$throughput_file_a" using 1:2 with linespoints title "Throughput"
-EOF
-
-# Use Gnuplot to create the response time graph
-gnuplot <<EOF
-set terminal png
-set output "response_time_graph7.png"
-set title "Number of Clients vs. Average Response Time"
-set xlabel "Number of Clients"
-set ylabel "Average Response Time(in microseconds)"
-set grid
-plot "$response_time_file_a" using 1:2 with linespoints title "Average Response Time"
-EOF
-gnuplot <<EOF
-set terminal png
-set output "Combined_Throughput_Graph.png"
-set title "Number of Clients vs. Throughput"
-set xlabel "Number of Clients"
-set ylabel "Throughput"
-set grid
-plot "$throughput_file" using 1:2 with linespoints title "Throughput ver2" linecolor rgb "blue", \
-     "$throughput_file_a" using 1:2 with linespoints title "Throughput ver1" linecolor rgb "red"
-EOF
-gnuplot <<EOF
-set terminal png
-set output "Combined_Response_time_Graph.png"
-set title "Number of Clients vs. Response_Time"
-set xlabel "Number of Clients"
-set ylabel "Response Time"
-set grid
-plot "$response_time_file" using 1:2 with linespoints title "Response Time ver2" linecolor rgb "blue", \
-     "$response_time_file_a" using 1:2 with linespoints title "Response Time ver1" linecolor rgb "red"
-EOF
-
-echo "Graphs created"
-
+    END{
+        printf("Average time taken = %f microseconds.\nThroughput = %f\n", sum/total, th/k)
+    }'
+cat outputs/cu.txt | awk ' 
+	BEGIN{
+    		FS=" ";
+    		sum=0;
+    		k=0;
+	} 
+	{	
+         sum+=$14;
+         k+=1;
+        }
+        END{
+        printf("CPU utilization =%f\n",100-sum/k)   ;     
+}'

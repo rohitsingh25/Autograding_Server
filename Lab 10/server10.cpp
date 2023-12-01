@@ -10,12 +10,6 @@ pthread_cond_t cond;
 // variables for analysis purpose
 float queue_size=0,done_req=0;
 
-// structure for thread data which includes client socket and request id
-// struct ThreadData {
-//     int clientSocket;
-//     long long int counter;
-// };
-
 // queue for storing request id
 queue<ThreadData> requestQueue;
 
